@@ -1,19 +1,21 @@
 #!/bin/bash
-set -e
-cd /opt/student-app
-MODEL_VERSION=$(tr -d '[:space:]' < VERSION)
-if [ -z "$MODEL_VERSION" ]; then
-    echo "ERROR: VERSION file is empty."
-    exit 1
-fi
-echo "Deploying model version: $MODEL_VERSION"
-docker build -t student-app:latest .
-docker rm -f student-app 2>/dev/null || true
+set -Eeuo pipefail
+AWS_REGION="ap-south-1"
+ECR_REPOSITORY_URI="ACCOUNT_ID.dkr.ecr.ap-south-1.amazonaws.com/archanagciet"
+CONTAINER_NAME="archanagciet"
+IMAGE_TAG="${IMAGE_TAG:-latest}"
+APP_PORT="${APP_PORT:-5000}"
+echo "Logging in to Amazon ECR"
+aws ecr get-login-password --region "$AWS_REGION" \
+  | docker login --username AWS --password-stdin "$ECR_REPOSITORY_URI"
+echo "Pulling application image"
+docker pull "${ECR_REPOSITORY_URI}:${IMAGE_TAG}"
+echo "Replacing old container"
+docker rm -f "$CONTAINER_NAME" 2>/dev/null || true
+echo "Starting application container"
 docker run -d \
-    --name student-app \
-    --restart unless-stopped \
-    -p 80:5000 \
-    -e MODEL_VERSION="$MODEL_VERSION" \
-    student-app:latest
-docker ps --filter "name=student-app"
-echo "Deployment completed successfully."
+  --name "$CONTAINER_NAME" \
+  --restart unless-stopped \
+  -p "80:${APP_PORT}" \
+  "${ECR_REPOSITORY_URI}:${IMAGE_TAG}"
+echo "Container started"
